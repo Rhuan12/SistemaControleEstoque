@@ -8,10 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Plus, Search, Package, Edit, Trash2, RefreshCw, ImageOff,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Layers,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+const TAMANHOS_ADULTO  = ["PP", "P", "M", "G", "GG", "XG"];
+const TAMANHOS_INFANTIL = ["2", "4", "6", "8", "10", "12", "14", "16"];
+function getTamanhos(tipo) {
+  return tipo === "infantil" ? TAMANHOS_INFANTIL : TAMANHOS_ADULTO;
+}
 
 const TIPOS_LABEL = {
   "oversized": "Oversized",
@@ -20,6 +29,101 @@ const TIPOS_LABEL = {
   "infantil": "Infantil",
   "regata": "Regata",
 };
+
+/* ── Modal de estoque detalhado ─────────────────────────────── */
+function ModalEstoque({ camisa, open, onClose }) {
+  if (!camisa) return null;
+
+  const tamanhos = getTamanhos(camisa.tipo);
+
+  const totalGeral = camisa.camisa_cores?.reduce((acc, cor) => {
+    return acc + (cor.camisa_estoque?.reduce((s, e) => s + (e.quantidade || 0), 0) || 0);
+  }, 0) || 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Layers className="w-4 h-4 text-primary" />
+            Estoque Detalhado — {camisa.nome}
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Ref: {camisa.referencia}</p>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-2">
+          {camisa.camisa_cores?.length ? (
+            camisa.camisa_cores.map((cor) => {
+              const totalCor = cor.camisa_estoque?.reduce((s, e) => s + (e.quantidade || 0), 0) || 0;
+              // Monta mapa tamanho → quantidade para acesso rápido
+              const estoqueMap = Object.fromEntries(
+                (cor.camisa_estoque || []).map((e) => [e.tamanho, e.quantidade])
+              );
+
+              return (
+                <div key={cor.id} className="border border-border rounded-lg overflow-hidden">
+                  {/* Cabeçalho da cor */}
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 border-b border-border">
+                    {cor.foto_url ? (
+                      <img
+                        src={cor.foto_url}
+                        alt={cor.cor}
+                        className="w-8 h-8 rounded-md object-cover border border-border flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-md bg-slate-200 flex items-center justify-center flex-shrink-0">
+                        <ImageOff className="w-3.5 h-3.5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <span className="font-semibold text-sm flex-1">{cor.cor}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Subtotal:{" "}
+                      <strong className="text-foreground">{totalCor} un.</strong>
+                    </span>
+                  </div>
+
+                  {/* Grade de tamanhos */}
+                  <div className="grid divide-x divide-border" style={{ gridTemplateColumns: `repeat(${tamanhos.length}, minmax(0, 1fr))` }}>
+                    {/* Linha de cabeçalho: tamanhos */}
+                    {tamanhos.map((tam) => (
+                      <div key={tam} className="text-center text-xs font-semibold text-muted-foreground py-2 bg-white border-b border-border">
+                        {tam}
+                      </div>
+                    ))}
+                    {/* Linha de quantidades */}
+                    {tamanhos.map((tam) => {
+                      const qtd = estoqueMap[tam] ?? 0;
+                      return (
+                        <div
+                          key={tam}
+                          className={`text-center text-sm font-semibold py-3 ${
+                            qtd === 0 ? "text-muted-foreground/50" : "text-foreground"
+                          }`}
+                        >
+                          {qtd}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Nenhuma cor cadastrada.
+            </p>
+          )}
+
+          {/* Rodapé: total geral */}
+          <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
+            <span className="text-sm font-semibold text-primary">Estoque Total</span>
+            <span className="text-lg font-bold text-primary">{totalGeral} un.</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 /* ── Carrossel de fotos ─────────────────────────────────────── */
 function Carrossel({ slides }) {
@@ -124,6 +228,7 @@ function Carrossel({ slides }) {
 /* ── Card de camisa ─────────────────────────────────────────── */
 function CamisaCard({ camisa, onDelete }) {
   const router = useRouter();
+  const [modalEstoqueAberto, setModalEstoqueAberto] = useState(false);
 
   // Monta os slides (todas as cores, com ou sem foto)
   const slides = camisa.camisa_cores?.length
@@ -135,66 +240,85 @@ function CamisaCard({ camisa, onDelete }) {
   }, 0) || 0;
 
   return (
-    <div className="group bg-white rounded-xl border border-border shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
-      {/* Carrossel */}
-      <Carrossel slides={slides} />
+    <>
+      <ModalEstoque
+        camisa={camisa}
+        open={modalEstoqueAberto}
+        onClose={() => setModalEstoqueAberto(false)}
+      />
 
-      {/* Info */}
-      <div className="p-4 flex flex-col flex-1">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="min-w-0">
-            <h3 className="font-semibold text-sm leading-tight truncate">{camisa.nome}</h3>
-            <p className="text-xs text-muted-foreground">Ref: {camisa.referencia}</p>
-          </div>
-          <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end">
-            <Badge variant="secondary" className="text-xs">{TIPOS_LABEL[camisa.tipo]}</Badge>
-            {camisa.estampada && <Badge variant="outline" className="text-xs">Estampada</Badge>}
-          </div>
-        </div>
+      <div className="group bg-white rounded-xl border border-border shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
+        {/* Carrossel */}
+        <Carrossel slides={slides} />
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-          <span>
-            Estoque total: <strong className="text-foreground">{totalEstoque} un.</strong>
-          </span>
-          <span>{camisa.camisa_cores?.length || 0} cor{(camisa.camisa_cores?.length || 0) !== 1 ? "es" : ""}</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <div className="bg-slate-50 rounded-lg p-2 text-center">
-            <p className="text-xs text-muted-foreground">Varejo</p>
-            <p className="font-semibold text-sm">
-              R$ {Number(camisa.preco_varejo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </p>
+        {/* Info */}
+        <div className="p-4 flex flex-col flex-1">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm leading-tight truncate">{camisa.nome}</h3>
+              <p className="text-xs text-muted-foreground">Ref: {camisa.referencia}</p>
+            </div>
+            <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end">
+              <Badge variant="secondary" className="text-xs">{TIPOS_LABEL[camisa.tipo]}</Badge>
+              {camisa.estampada && <Badge variant="outline" className="text-xs">Estampada</Badge>}
+            </div>
           </div>
-          <div className="bg-slate-50 rounded-lg p-2 text-center">
-            <p className="text-xs text-muted-foreground">Atacado</p>
-            <p className="font-semibold text-sm">
-              R$ {Number(camisa.preco_atacado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex gap-2 mt-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => router.push(`/estoque/${camisa.id}`)}
-          >
-            <Edit className="w-3.5 h-3.5 mr-1" />
-            Editar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={() => onDelete(camisa)}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+            {/* Clicável para abrir o modal de detalhamento */}
+            <button
+              onClick={() => setModalEstoqueAberto(true)}
+              className="flex items-center gap-1 hover:text-primary transition-colors group/estoque"
+              title="Ver detalhes do estoque"
+            >
+              <Layers className="w-3 h-3 opacity-0 group-hover/estoque:opacity-100 transition-opacity" />
+              <span>
+                Estoque total:{" "}
+                <strong className="text-foreground underline decoration-dotted underline-offset-2 group-hover/estoque:text-primary transition-colors">
+                  {totalEstoque} un.
+                </strong>
+              </span>
+            </button>
+            <span>{camisa.camisa_cores?.length || 0} cor{(camisa.camisa_cores?.length || 0) !== 1 ? "es" : ""}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="bg-slate-50 rounded-lg p-2 text-center">
+              <p className="text-xs text-muted-foreground">Varejo</p>
+              <p className="font-semibold text-sm">
+                R$ {Number(camisa.preco_varejo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-2 text-center">
+              <p className="text-xs text-muted-foreground">Atacado</p>
+              <p className="font-semibold text-sm">
+                R$ {Number(camisa.preco_atacado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 mt-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => router.push(`/estoque/${camisa.id}`)}
+            >
+              <Edit className="w-3.5 h-3.5 mr-1" />
+              Editar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onDelete(camisa)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
