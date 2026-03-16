@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest . --js --tailwind --eslint --no-app --no-src-dir --no-import-alias --yes)",
+      "Bash(npx create-next-app@15 . --js --tailwind --eslint --no-app --no-src-dir --no-import-alias --yes)",
+      "Read(//c/Users/User/Documents/Projetos-Trabalhos/**)",
+      "Bash(npx create-next-app@15 sistema-controle-estoque --js --tailwind --eslint --no-app --no-src-dir --no-import-alias --yes)",
+      "Bash(cp -r \"C:\\\\Users\\\\User\\\\Documents\\\\Projetos-Trabalhos\\\\sistema-controle-estoque/.\" \"C:\\\\Users\\\\User\\\\Documents\\\\Projetos-Trabalhos\\\\SistemaControleEstoque/\")",
+      "Bash(rm -rf \"C:\\\\Users\\\\User\\\\Documents\\\\Projetos-Trabalhos\\\\sistema-controle-estoque\")",
+      "Bash(npm install:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npm run:*)"
+    ]
+  }
+}
