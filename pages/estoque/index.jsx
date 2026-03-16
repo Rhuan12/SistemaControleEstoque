@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
 import AuthGuard from "@/components/AuthGuard";
 import Layout from "@/components/Layout";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Search, Package, Edit, Trash2, RefreshCw, ImageOff,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -20,46 +21,123 @@ const TIPOS_LABEL = {
   "regata": "Regata",
 };
 
+/* ── Carrossel de fotos ─────────────────────────────────────── */
+function Carrossel({ slides }) {
+  const [atual, setAtual] = useState(0);
+  const [pausado, setPausado] = useState(false);
+  const intervalRef = useRef(null);
+  const total = slides.length;
+
+  // Avanço automático
+  useEffect(() => {
+    if (total <= 1 || pausado) return;
+    intervalRef.current = setInterval(() => {
+      setAtual((prev) => (prev + 1) % total);
+    }, 3000);
+    return () => clearInterval(intervalRef.current);
+  }, [total, pausado]);
+
+  function anterior(e) {
+    e.stopPropagation();
+    setAtual((prev) => (prev - 1 + total) % total);
+  }
+
+  function proximo(e) {
+    e.stopPropagation();
+    setAtual((prev) => (prev + 1) % total);
+  }
+
+  function irPara(e, idx) {
+    e.stopPropagation();
+    setAtual(idx);
+  }
+
+  const slide = slides[atual];
+
+  return (
+    <div
+      className="aspect-square bg-slate-100 relative overflow-hidden select-none"
+      onMouseEnter={() => setPausado(true)}
+      onMouseLeave={() => setPausado(false)}
+    >
+      {/* Imagem com transição suave */}
+      {slide.foto_url ? (
+        <img
+          key={slide.foto_url}
+          src={slide.foto_url}
+          alt={slide.cor}
+          className="w-full h-full object-cover transition-opacity duration-300"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <ImageOff className="w-8 h-8" />
+          <span className="text-xs">Sem foto</span>
+        </div>
+      )}
+
+      {/* Setas — visíveis ao passar o mouse */}
+      {total > 1 && (
+        <>
+          <button
+            onClick={anterior}
+            style={{ opacity: pausado ? 1 : 0, transition: "opacity 0.2s" }}
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/65 text-white flex items-center justify-center backdrop-blur-sm"
+            aria-label="Foto anterior"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={proximo}
+            style={{ opacity: pausado ? 1 : 0, transition: "opacity 0.2s" }}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 hover:bg-black/65 text-white flex items-center justify-center backdrop-blur-sm"
+            aria-label="Próxima foto"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </>
+      )}
+
+      {/* Label da cor atual */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 pt-6 pb-2">
+        <span className="text-white text-xs font-medium">{slide.cor}</span>
+      </div>
+
+      {/* Dots indicadores */}
+      {total > 1 && (
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          {slides.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={(e) => irPara(e, idx)}
+              className={`w-1.5 h-1.5 rounded-full transition-all ${
+                idx === atual ? "bg-white scale-125" : "bg-white/50"
+              }`}
+              aria-label={`Ir para foto ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Card de camisa ─────────────────────────────────────────── */
 function CamisaCard({ camisa, onDelete }) {
   const router = useRouter();
-  const primeiraFoto = camisa.camisa_cores?.[0]?.foto_url;
+
+  // Monta os slides (todas as cores, com ou sem foto)
+  const slides = camisa.camisa_cores?.length
+    ? camisa.camisa_cores
+    : [{ cor: "Sem cor", foto_url: null }];
+
   const totalEstoque = camisa.camisa_cores?.reduce((acc, cor) => {
     return acc + (cor.camisa_estoque?.reduce((s, e) => s + (e.quantidade || 0), 0) || 0);
   }, 0) || 0;
 
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
-      {/* Foto */}
-      <div className="aspect-square bg-slate-100 relative">
-        {primeiraFoto ? (
-          <img
-            src={primeiraFoto}
-            alt={camisa.nome}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-            <ImageOff className="w-8 h-8" />
-            <span className="text-xs">Sem foto</span>
-          </div>
-        )}
-        {/* Cores disponíveis */}
-        <div className="absolute top-2 right-2 flex gap-1 flex-wrap justify-end max-w-[80%]">
-          {camisa.camisa_cores?.slice(0, 4).map((cor) => (
-            <span
-              key={cor.id}
-              className="bg-white/90 backdrop-blur-sm text-xs px-1.5 py-0.5 rounded-full border border-border text-foreground"
-            >
-              {cor.cor}
-            </span>
-          ))}
-          {camisa.camisa_cores?.length > 4 && (
-            <span className="bg-white/90 backdrop-blur-sm text-xs px-1.5 py-0.5 rounded-full border border-border text-muted-foreground">
-              +{camisa.camisa_cores.length - 4}
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="group bg-white rounded-xl border border-border shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
+      {/* Carrossel */}
+      <Carrossel slides={slides} />
 
       {/* Info */}
       <div className="p-4 flex flex-col flex-1">
@@ -68,14 +146,17 @@ function CamisaCard({ camisa, onDelete }) {
             <h3 className="font-semibold text-sm leading-tight truncate">{camisa.nome}</h3>
             <p className="text-xs text-muted-foreground">Ref: {camisa.referencia}</p>
           </div>
-          <div className="flex gap-1 flex-shrink-0">
+          <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end">
             <Badge variant="secondary" className="text-xs">{TIPOS_LABEL[camisa.tipo]}</Badge>
             {camisa.estampada && <Badge variant="outline" className="text-xs">Estampada</Badge>}
           </div>
         </div>
 
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-          <span>Estoque total: <strong className="text-foreground">{totalEstoque} un.</strong></span>
+          <span>
+            Estoque total: <strong className="text-foreground">{totalEstoque} un.</strong>
+          </span>
+          <span>{camisa.camisa_cores?.length || 0} cor{(camisa.camisa_cores?.length || 0) !== 1 ? "es" : ""}</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-4">
