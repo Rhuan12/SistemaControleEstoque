@@ -9,7 +9,8 @@
       "Bash(rm -rf \"C:\\\\Users\\\\User\\\\Documents\\\\Projetos-Trabalhos\\\\sistema-controle-estoque\")",
       "Bash(npm install:*)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx next:*)"
     ]
   }
 }

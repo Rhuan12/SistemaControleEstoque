@@ -204,8 +204,8 @@ export default function Historico() {
       inicio = new Date(hoje.getTime() - 29 * 86400000).toISOString();
       fim = new Date(hoje.getTime() + 86400000).toISOString();
     } else if (filtroData === "custom" && dataInicio && dataFim) {
-      inicio = new Date(dataInicio).toISOString();
-      fim = new Date(new Date(dataFim).getTime() + 86400000).toISOString();
+      inicio = new Date(`${dataInicio}T00:00:00`).toISOString();
+      fim = new Date(`${dataFim}T23:59:59.999`).toISOString();
     }
 
     const query = supabase

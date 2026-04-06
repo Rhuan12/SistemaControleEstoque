@@ -31,9 +31,14 @@ function StatCard({ icon: Icon, label, value, sub, color = "text-foreground" }) 
   );
 }
 
+function localDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function Relatorio() {
   const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateString();
   const [data, setData] = useState(today);
   const [vendas, setVendas] = useState([]);
   const [itens, setItens] = useState([]);
@@ -41,39 +46,48 @@ export default function Relatorio() {
 
   const fetchDados = useCallback(async () => {
     setLoading(true);
-    const inicio = new Date(data);
-    inicio.setHours(0, 0, 0, 0);
-    const fim = new Date(data);
-    fim.setHours(23, 59, 59, 999);
+    // Usar string sem "Z" para que o Date seja interpretado no horário local
+    const inicio = new Date(`${data}T00:00:00`);
+    const fim = new Date(`${data}T23:59:59.999`);
 
-    const [vendasRes, itensRes] = await Promise.all([
-      supabase
-        .from("vendas")
-        .select("*")
-        .gte("created_at", inicio.toISOString())
-        .lte("created_at", fim.toISOString())
-        .order("created_at"),
-      supabase
+    const { data: vendasData, error: vendasError } = await supabase
+      .from("vendas")
+      .select("*")
+      .gte("created_at", inicio.toISOString())
+      .lte("created_at", fim.toISOString())
+      .order("created_at");
+
+    if (vendasError) {
+      toast.error("Erro ao carregar relatório.");
+      setLoading(false);
+      return;
+    }
+
+    setVendas(vendasData || []);
+
+    if (vendasData && vendasData.length > 0) {
+      const ids = vendasData.map((v) => v.id);
+      const { data: itensData } = await supabase
         .from("venda_itens")
-        .select("*, vendas!inner(created_at, status)")
-        .gte("vendas.created_at", inicio.toISOString())
-        .lte("vendas.created_at", fim.toISOString()),
-    ]);
+        .select("*")
+        .in("venda_id", ids);
+      setItens(itensData || []);
+    } else {
+      setItens([]);
+    }
 
-    if (vendasRes.error) toast.error("Erro ao carregar relatório.");
-    setVendas(vendasRes.data || []);
-    setItens(itensRes.data || []);
     setLoading(false);
   }, [data]);
 
   useEffect(() => { fetchDados(); }, [fetchDados]);
 
   const vendasConcluidas = vendas.filter((v) => v.status === "concluida");
+  const idsConcluidas = new Set(vendasConcluidas.map((v) => v.id));
+  const itensConcluidos = itens.filter((i) => idsConcluidas.has(i.venda_id));
+
   const totalArrecadado = vendasConcluidas.reduce((s, v) => s + Number(v.total), 0);
   const totalDescontos = vendasConcluidas.reduce((s, v) => s + Number(v.desconto_total), 0);
-  const totalPecas = itens
-    .filter((i) => i.vendas?.status === "concluida")
-    .reduce((s, i) => s + i.quantidade, 0);
+  const totalPecas = itensConcluidos.reduce((s, i) => s + i.quantidade, 0);
   const ticketMedio = vendasConcluidas.length > 0 ? totalArrecadado / vendasConcluidas.length : 0;
 
   // Agrupamento por forma de pagamento
@@ -99,8 +113,7 @@ export default function Relatorio() {
 
   // Top produtos
   const topProdutos = Object.values(
-    itens
-      .filter((i) => i.vendas?.status === "concluida")
+    itensConcluidos
       .reduce((acc, item) => {
         const key = `${item.nome_camisa}|${item.cor}|${item.tamanho}`;
         if (!acc[key]) acc[key] = { nome: item.nome_camisa, cor: item.cor, tamanho: item.tamanho, quantidade: 0, total: 0 };
