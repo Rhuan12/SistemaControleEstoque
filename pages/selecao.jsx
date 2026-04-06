@@ -3,7 +3,6 @@ import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Package, ShoppingCart, Shirt, LogOut } from "lucide-react";
 
 export default function Selecao() {
@@ -63,24 +62,22 @@ export default function Selecao() {
               </CardContent>
             </Card>
 
-            {/* Caixa (bloqueado) */}
-            <Card className="opacity-60 cursor-not-allowed border-2 border-dashed">
+            {/* Caixa */}
+            <Card
+              className="cursor-pointer hover:shadow-lg transition-all hover:-translate-y-1 border-2 hover:border-primary"
+              onClick={() => router.push("/caixa")}
+            >
               <CardContent className="flex flex-col items-center text-center p-8 gap-4">
-                <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center">
-                  <ShoppingCart className="w-8 h-8 text-muted-foreground" />
+                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                  <ShoppingCart className="w-8 h-8 text-primary" />
                 </div>
                 <div>
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <h2 className="text-xl font-bold">Ir para Caixa</h2>
-                    <Badge variant="warning">Em desenvolvimento</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Sistema de vendas e caixa em breve
+                  <h2 className="text-xl font-bold">Ir para Caixa</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Registrar vendas e consultar histórico
                   </p>
                 </div>
-                <Button className="w-full mt-2" disabled>
-                  Em breve
-                </Button>
+                <Button className="w-full mt-2">Acessar Caixa</Button>
               </CardContent>
             </Card>
           </div>
