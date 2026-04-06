@@ -13,7 +13,7 @@ import CarrinhoItem from "@/components/caixa/CarrinhoItem";
 import ResumoVenda from "@/components/caixa/ResumoVenda";
 import {
   Search, ShoppingCart, ImageOff, Banknote, Smartphone,
-  CreditCard, History, BarChart2, Trash2,
+  CreditCard, History, BarChart2, Trash2, User, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -43,6 +43,12 @@ export default function Caixa() {
   // Carrinho
   const [carrinho, setCarrinho] = useState([]);
 
+  // Cliente vinculado à venda
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [resultadosCliente, setResultadosCliente] = useState([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState(null);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+
   // Pagamento
   const [formaPag, setFormaPag] = useState("dinheiro");
   const [parcelas, setParcelas] = useState(1);
@@ -65,6 +71,23 @@ export default function Caixa() {
   }, []);
 
   useEffect(() => { fetchCamisas(); }, [fetchCamisas]);
+
+  // Busca de clientes com debounce
+  useEffect(() => {
+    if (!buscaCliente.trim()) { setResultadosCliente([]); return; }
+    const t = setTimeout(async () => {
+      setBuscandoCliente(true);
+      const termo = buscaCliente.toLowerCase();
+      const { data } = await supabase
+        .from("clientes")
+        .select("id, nome, telefone")
+        .or(`nome.ilike.%${termo}%,telefone.ilike.%${buscaCliente.replace(/\D/g, "")}%`)
+        .limit(5);
+      setResultadosCliente(data || []);
+      setBuscandoCliente(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [buscaCliente]);
 
   // Carrinho
   function adicionarAoCarrinho(item) {
@@ -125,6 +148,7 @@ export default function Caixa() {
         total,
         status: "concluida",
         created_by: user.id,
+        cliente_id: clienteSelecionado?.id || null,
       };
 
       const { data: vendaData, error: vendaErr } = await supabase
@@ -173,11 +197,13 @@ export default function Caixa() {
       setItensFinalizado(itensPayload);
       setResumoAberto(true);
 
-      // Limpar carrinho e pagamento
+      // Limpar carrinho, pagamento e cliente
       setCarrinho([]);
       setValorRecebido("");
       setParcelas(1);
       setFormaPag("dinheiro");
+      setClienteSelecionado(null);
+      setBuscaCliente("");
 
       // Recarregar estoque
       fetchCamisas();
@@ -365,6 +391,63 @@ export default function Caixa() {
                       <span>Total</span>
                       <span className="text-primary">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                     </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Cliente (opcional) */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Cliente <span className="normal-case font-normal">(opcional)</span>
+                    </p>
+                    {clienteSelecionado ? (
+                      <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                        <User className="w-4 h-4 text-primary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">{clienteSelecionado.nome}</p>
+                          <p className="text-xs text-muted-foreground">{clienteSelecionado.telefone}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setClienteSelecionado(null); setBuscaCliente(""); }}
+                          className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar cliente..."
+                          value={buscaCliente}
+                          onChange={(e) => setBuscaCliente(e.target.value)}
+                          className="pl-8 h-8 text-xs"
+                        />
+                        {buscaCliente && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-20 overflow-hidden">
+                            {buscandoCliente ? (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">Buscando...</div>
+                            ) : resultadosCliente.length === 0 ? (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum cliente encontrado.</div>
+                            ) : (
+                              resultadosCliente.map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => { setClienteSelecionado(c); setBuscaCliente(""); setResultadosCliente([]); }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-accent flex items-center gap-2"
+                                >
+                                  <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                  <span className="font-medium">{c.nome}</span>
+                                  <span className="text-muted-foreground ml-auto">{c.telefone}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <Separator />

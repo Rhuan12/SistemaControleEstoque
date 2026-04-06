@@ -2,7 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Shirt, Package, ShoppingCart, LogOut, ShieldCheck, Menu, X } from "lucide-react";
+import { Shirt, Package, ShoppingCart, Users, LogOut, ShieldCheck, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -17,8 +17,9 @@ export default function Layout({ children }) {
   }
 
   const navLinks = [
-    { href: "/estoque", label: "Estoque", icon: Package },
-    { href: "/caixa", label: "Caixa", icon: ShoppingCart },
+    { href: "/estoque",   label: "Estoque",   icon: Package },
+    { href: "/caixa",     label: "Caixa",     icon: ShoppingCart },
+    { href: "/clientes",  label: "Clientes",  icon: Users },
     ...(profile?.role === "admin" ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }] : []),
   ];
 
