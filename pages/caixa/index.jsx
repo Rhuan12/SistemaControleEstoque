@@ -90,25 +90,35 @@ export default function Caixa() {
   }, [buscaCliente]);
 
   // Carrinho
-  function adicionarAoCarrinho(item) {
-    const key = `${item.camisa_cor_id}_${item.tamanho}_${item.tipo_preco}_${item.desconto_percentual}`;
+  function adicionarAoCarrinho(itens) {
+    const lista = Array.isArray(itens) ? itens : [itens];
+    let adicionados = 0;
     setCarrinho((prev) => {
-      const existente = prev.find((i) => i._key === key);
-      if (existente) {
-        const novaQtd = existente.quantidade + item.quantidade;
-        if (novaQtd > item.estoque_disponivel) {
-          toast.error(`Estoque insuficiente. Disponível: ${item.estoque_disponivel}`);
-          return prev;
+      let carrinho = [...prev];
+      for (const item of lista) {
+        const key = `${item.camisa_cor_id}_${item.tamanho}_${item.tipo_preco}_${item.desconto_percentual}`;
+        const idx = carrinho.findIndex((i) => i._key === key);
+        if (idx >= 0) {
+          const novaQtd = carrinho[idx].quantidade + item.quantidade;
+          if (novaQtd > item.estoque_disponivel) {
+            toast.error(`Estoque insuficiente para ${item.tamanho}. Disponível: ${item.estoque_disponivel}`);
+            continue;
+          }
+          carrinho[idx] = { ...carrinho[idx], quantidade: novaQtd, subtotal: carrinho[idx].preco_final * novaQtd };
+        } else {
+          carrinho = [...carrinho, { ...item, _key: key }];
         }
-        return prev.map((i) =>
-          i._key === key
-            ? { ...i, quantidade: novaQtd, subtotal: i.preco_final * novaQtd }
-            : i
-        );
+        adicionados++;
       }
-      return [...prev, { ...item, _key: key }];
+      return carrinho;
     });
-    toast.success(`${item.nome_camisa} adicionado!`);
+    if (adicionados > 0) {
+      const nome = lista[0].nome_camisa;
+      toast.success(adicionados === 1
+        ? `${nome} adicionado!`
+        : `${nome} — ${adicionados} tamanhos adicionados!`
+      );
+    }
   }
 
   function removerDoCarrinho(key) {

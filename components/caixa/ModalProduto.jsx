@@ -14,16 +14,15 @@ const TIPOS_LABEL = {
 
 export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
   const [corSelecionada, setCorSelecionada] = useState(null);
-  const [tamanhoSelecionado, setTamanhoSelecionado] = useState(null);
-  const [quantidade, setQuantidade] = useState(1);
+  const [qtdPorTamanho, setQtdPorTamanho] = useState({});
   const [tipoPreco, setTipoPreco] = useState("varejo");
   const [desconto, setDesconto] = useState(0);
 
   useEffect(() => {
     if (open && camisa) {
-      setCorSelecionada(camisa.camisa_cores?.[0] || null);
-      setTamanhoSelecionado(null);
-      setQuantidade(1);
+      const cor = camisa.camisa_cores?.[0] || null;
+      setCorSelecionada(cor);
+      setQtdPorTamanho({});
       setTipoPreco("varejo");
       setDesconto(0);
     }
@@ -34,34 +33,60 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
   const precoBase = tipoPreco === "varejo" ? Number(camisa.preco_varejo) : Number(camisa.preco_atacado);
   const descontoValor = tipoPreco === "varejo" ? (precoBase * (Number(desconto) || 0)) / 100 : 0;
   const precoFinal = precoBase - descontoValor;
-  const subtotal = precoFinal * quantidade;
 
-  const estoqueDoTamanho = tamanhoSelecionado
-    ? (corSelecionada?.camisa_estoque?.find((e) => e.tamanho === tamanhoSelecionado)?.quantidade || 0)
-    : 0;
+  const tamanhos = corSelecionada?.camisa_estoque || [];
 
-  function handleAdicionar() {
-    if (!corSelecionada || !tamanhoSelecionado) return;
-    onAdicionar({
+  function setQtd(tamanho, valor, estoqueMax) {
+    const v = Math.min(estoqueMax, Math.max(0, parseInt(valor) || 0));
+    setQtdPorTamanho((prev) => ({ ...prev, [tamanho]: v }));
+  }
+
+  function incrementar(tamanho, estoqueMax) {
+    setQtdPorTamanho((prev) => ({
+      ...prev,
+      [tamanho]: Math.min(estoqueMax, (prev[tamanho] || 0) + 1),
+    }));
+  }
+
+  function decrementar(tamanho) {
+    setQtdPorTamanho((prev) => ({
+      ...prev,
+      [tamanho]: Math.max(0, (prev[tamanho] || 0) - 1),
+    }));
+  }
+
+  const itensSelecionados = tamanhos
+    .filter((e) => (qtdPorTamanho[e.tamanho] || 0) > 0)
+    .map((e) => ({
       camisa_id: camisa.id,
       camisa_cor_id: corSelecionada.id,
       nome_camisa: camisa.nome,
       referencia: camisa.referencia,
       cor: corSelecionada.cor,
       foto_url: corSelecionada.foto_url,
-      tamanho: tamanhoSelecionado,
-      quantidade,
+      tamanho: e.tamanho,
+      quantidade: qtdPorTamanho[e.tamanho],
       tipo_preco: tipoPreco,
       preco_unitario: precoBase,
       desconto_percentual: tipoPreco === "varejo" ? Number(desconto) || 0 : 0,
       preco_final: precoFinal,
-      subtotal,
-      estoque_disponivel: estoqueDoTamanho,
-    });
+      subtotal: precoFinal * qtdPorTamanho[e.tamanho],
+      estoque_disponivel: e.quantidade,
+    }));
+
+  const subtotalTotal = itensSelecionados.reduce((s, i) => s + i.subtotal, 0);
+  const totalPecas = itensSelecionados.reduce((s, i) => s + i.quantidade, 0);
+
+  function handleAdicionar() {
+    if (itensSelecionados.length === 0) return;
+    onAdicionar(itensSelecionados);
     onClose();
   }
 
-  const tamanhos = corSelecionada?.camisa_estoque || [];
+  function handleCorChange(cor) {
+    setCorSelecionada(cor);
+    setQtdPorTamanho({});
+  }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -102,7 +127,7 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
                 <button
                   key={cor.id}
                   type="button"
-                  onClick={() => { setCorSelecionada(cor); setTamanhoSelecionado(null); setQuantidade(1); }}
+                  onClick={() => handleCorChange(cor)}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all",
                     corSelecionada?.id === cor.id
@@ -119,77 +144,41 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
             </div>
           </div>
 
-          {/* Tamanho */}
-          {corSelecionada && (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tamanho</Label>
-              <div className="flex flex-wrap gap-2">
-                {tamanhos.map((e) => {
-                  const sem = e.quantidade === 0;
-                  return (
-                    <button
-                      key={e.tamanho}
-                      type="button"
-                      disabled={sem}
-                      onClick={() => { setTamanhoSelecionado(e.tamanho); setQuantidade(1); }}
-                      className={cn(
-                        "w-14 h-10 rounded-lg border text-sm font-medium transition-all relative",
-                        sem && "opacity-40 cursor-not-allowed line-through",
-                        !sem && tamanhoSelecionado === e.tamanho
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : !sem && "border-border hover:border-primary/50"
-                      )}
-                    >
-                      {e.tamanho}
-                      {!sem && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-slate-600 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                          {e.quantidade > 99 ? "99+" : e.quantidade}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Tipo de preço */}
-          {tamanhoSelecionado && (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo de Preço</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setTipoPreco("varejo"); setDesconto(0); }}
-                  className={cn(
-                    "p-3 rounded-lg border text-sm transition-all text-left",
-                    tipoPreco === "varejo" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <p className={cn("font-semibold", tipoPreco === "varejo" && "text-primary")}>Varejo</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    R$ {Number(camisa.preco_varejo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setTipoPreco("atacado"); setDesconto(0); }}
-                  className={cn(
-                    "p-3 rounded-lg border text-sm transition-all text-left",
-                    tipoPreco === "atacado" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <p className={cn("font-semibold", tipoPreco === "atacado" && "text-primary")}>Atacado</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    R$ {Number(camisa.preco_atacado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </p>
-                </button>
-              </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo de Preço</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setTipoPreco("varejo"); setDesconto(0); }}
+                className={cn(
+                  "p-3 rounded-lg border text-sm transition-all text-left",
+                  tipoPreco === "varejo" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                )}
+              >
+                <p className={cn("font-semibold", tipoPreco === "varejo" && "text-primary")}>Varejo</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  R$ {Number(camisa.preco_varejo).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTipoPreco("atacado"); setDesconto(0); }}
+                className={cn(
+                  "p-3 rounded-lg border text-sm transition-all text-left",
+                  tipoPreco === "atacado" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                )}
+              >
+                <p className={cn("font-semibold", tipoPreco === "atacado" && "text-primary")}>Atacado</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  R$ {Number(camisa.preco_atacado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </p>
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Desconto (somente varejo) */}
-          {tamanhoSelecionado && tipoPreco === "varejo" && (
+          {tipoPreco === "varejo" && (
             <div className="space-y-1.5">
               <Label htmlFor="desconto" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Desconto (%) — opcional
@@ -208,41 +197,82 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
             </div>
           )}
 
-          {/* Quantidade */}
-          {tamanhoSelecionado && (
-            <div className="space-y-1.5">
+          {/* Tamanhos com quantidade */}
+          {corSelecionada && (
+            <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Quantidade (máx: {estoqueDoTamanho})
+                Tamanhos e Quantidades
               </Label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQuantidade((q) => Math.max(1, q - 1))}
-                  className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-accent"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <Input
-                  type="number"
-                  min="1"
-                  max={estoqueDoTamanho}
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(Math.min(estoqueDoTamanho, Math.max(1, parseInt(e.target.value) || 1)))}
-                  className="w-20 text-center"
-                />
-                <button
-                  type="button"
-                  onClick={() => setQuantidade((q) => Math.min(estoqueDoTamanho, q + 1))}
-                  className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-accent"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <div className="space-y-2">
+                {tamanhos.map((e) => {
+                  const sem = e.quantidade === 0;
+                  const qty = qtdPorTamanho[e.tamanho] || 0;
+                  return (
+                    <div
+                      key={e.tamanho}
+                      className={cn(
+                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all",
+                        sem && "opacity-40",
+                        !sem && qty > 0 ? "border-primary bg-primary/5" : "border-border"
+                      )}
+                    >
+                      {/* Tamanho + estoque */}
+                      <div className="flex items-center gap-2 min-w-[80px]">
+                        <span className={cn(
+                          "font-semibold text-sm w-10 text-center",
+                          qty > 0 && "text-primary"
+                        )}>
+                          {e.tamanho}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {sem ? "sem estoque" : `${e.quantidade} un.`}
+                        </span>
+                      </div>
+
+                      {/* Controle de quantidade */}
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          type="button"
+                          disabled={sem || qty === 0}
+                          onClick={() => decrementar(e.tamanho)}
+                          className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={e.quantidade}
+                          value={qty}
+                          disabled={sem}
+                          onChange={(ev) => setQtd(e.tamanho, ev.target.value, e.quantidade)}
+                          className="w-14 h-7 text-center text-sm px-1"
+                        />
+                        <button
+                          type="button"
+                          disabled={sem || qty >= e.quantidade}
+                          onClick={() => incrementar(e.tamanho, e.quantidade)}
+                          className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Subtotal da linha */}
+                      {qty > 0 && (
+                        <span className="text-sm font-semibold text-primary min-w-[80px] text-right">
+                          R$ {(precoFinal * qty).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Resumo do item */}
-          {tamanhoSelecionado && (
+          {/* Resumo */}
+          {itensSelecionados.length > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-1">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Preço unitário</span>
@@ -254,15 +284,12 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
                   <span>- R$ {descontoValor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
-              {descontoValor > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Preço final</span>
-                  <span>R$ {precoFinal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>{totalPecas} {totalPecas === 1 ? "peça" : "peças"} · {itensSelecionados.length} {itensSelecionados.length === 1 ? "tamanho" : "tamanhos"}</span>
+              </div>
               <div className="flex justify-between font-bold text-base pt-1 border-t border-primary/20">
-                <span>Subtotal</span>
-                <span className="text-primary">R$ {subtotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <span>Total</span>
+                <span className="text-primary">R$ {subtotalTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
@@ -270,11 +297,13 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
           {/* Botão */}
           <Button
             className="w-full"
-            disabled={!corSelecionada || !tamanhoSelecionado || quantidade < 1}
+            disabled={itensSelecionados.length === 0}
             onClick={handleAdicionar}
           >
             <ShoppingCart className="w-4 h-4 mr-2" />
-            Adicionar ao Carrinho
+            {itensSelecionados.length === 0
+              ? "Selecione ao menos um tamanho"
+              : `Adicionar ${totalPecas} ${totalPecas === 1 ? "peça" : "peças"} ao Carrinho`}
           </Button>
         </div>
       </DialogContent>
