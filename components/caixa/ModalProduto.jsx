@@ -13,16 +13,14 @@ const TIPOS_LABEL = {
 };
 
 export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
-  const [corSelecionada, setCorSelecionada] = useState(null);
-  const [qtdPorTamanho, setQtdPorTamanho] = useState({});
+  // qtds[corId][tamanho] = quantidade
+  const [qtds, setQtds] = useState({});
   const [tipoPreco, setTipoPreco] = useState("varejo");
   const [desconto, setDesconto] = useState(0);
 
   useEffect(() => {
     if (open && camisa) {
-      const cor = camisa.camisa_cores?.[0] || null;
-      setCorSelecionada(cor);
-      setQtdPorTamanho({});
+      setQtds({});
       setTipoPreco("varejo");
       setDesconto(0);
     }
@@ -34,58 +32,67 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
   const descontoValor = tipoPreco === "varejo" ? (precoBase * (Number(desconto) || 0)) / 100 : 0;
   const precoFinal = precoBase - descontoValor;
 
-  const tamanhos = corSelecionada?.camisa_estoque || [];
+  function getQtd(corId, tamanho) {
+    return qtds[corId]?.[tamanho] || 0;
+  }
 
-  function setQtd(tamanho, valor, estoqueMax) {
+  function setQtd(corId, tamanho, valor, estoqueMax) {
     const v = Math.min(estoqueMax, Math.max(0, parseInt(valor) || 0));
-    setQtdPorTamanho((prev) => ({ ...prev, [tamanho]: v }));
-  }
-
-  function incrementar(tamanho, estoqueMax) {
-    setQtdPorTamanho((prev) => ({
+    setQtds((prev) => ({
       ...prev,
-      [tamanho]: Math.min(estoqueMax, (prev[tamanho] || 0) + 1),
+      [corId]: { ...(prev[corId] || {}), [tamanho]: v },
     }));
   }
 
-  function decrementar(tamanho) {
-    setQtdPorTamanho((prev) => ({
+  function incrementar(corId, tamanho, estoqueMax) {
+    setQtds((prev) => ({
       ...prev,
-      [tamanho]: Math.max(0, (prev[tamanho] || 0) - 1),
+      [corId]: {
+        ...(prev[corId] || {}),
+        [tamanho]: Math.min(estoqueMax, (prev[corId]?.[tamanho] || 0) + 1),
+      },
     }));
   }
 
-  const itensSelecionados = tamanhos
-    .filter((e) => (qtdPorTamanho[e.tamanho] || 0) > 0)
-    .map((e) => ({
-      camisa_id: camisa.id,
-      camisa_cor_id: corSelecionada.id,
-      nome_camisa: camisa.nome,
-      referencia: camisa.referencia,
-      cor: corSelecionada.cor,
-      foto_url: corSelecionada.foto_url,
-      tamanho: e.tamanho,
-      quantidade: qtdPorTamanho[e.tamanho],
-      tipo_preco: tipoPreco,
-      preco_unitario: precoBase,
-      desconto_percentual: tipoPreco === "varejo" ? Number(desconto) || 0 : 0,
-      preco_final: precoFinal,
-      subtotal: precoFinal * qtdPorTamanho[e.tamanho],
-      estoque_disponivel: e.quantidade,
+  function decrementar(corId, tamanho) {
+    setQtds((prev) => ({
+      ...prev,
+      [corId]: {
+        ...(prev[corId] || {}),
+        [tamanho]: Math.max(0, (prev[corId]?.[tamanho] || 0) - 1),
+      },
     }));
+  }
 
-  const subtotalTotal = itensSelecionados.reduce((s, i) => s + i.subtotal, 0);
+  // Gerar lista de itens selecionados (qty > 0) de todas as cores
+  const itensSelecionados = (camisa.camisa_cores || []).flatMap((cor) =>
+    (cor.camisa_estoque || [])
+      .filter((e) => getQtd(cor.id, e.tamanho) > 0)
+      .map((e) => ({
+        camisa_id: camisa.id,
+        camisa_cor_id: cor.id,
+        nome_camisa: camisa.nome,
+        referencia: camisa.referencia,
+        cor: cor.cor,
+        foto_url: cor.foto_url,
+        tamanho: e.tamanho,
+        quantidade: getQtd(cor.id, e.tamanho),
+        tipo_preco: tipoPreco,
+        preco_unitario: precoBase,
+        desconto_percentual: tipoPreco === "varejo" ? Number(desconto) || 0 : 0,
+        preco_final: precoFinal,
+        subtotal: precoFinal * getQtd(cor.id, e.tamanho),
+        estoque_disponivel: e.quantidade,
+      }))
+  );
+
   const totalPecas = itensSelecionados.reduce((s, i) => s + i.quantidade, 0);
+  const subtotalTotal = itensSelecionados.reduce((s, i) => s + i.subtotal, 0);
 
   function handleAdicionar() {
     if (itensSelecionados.length === 0) return;
     onAdicionar(itensSelecionados);
     onClose();
-  }
-
-  function handleCorChange(cor) {
-    setCorSelecionada(cor);
-    setQtdPorTamanho({});
   }
 
   return (
@@ -101,8 +108,8 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
         <div className="space-y-5 mt-1">
           {/* Info do produto */}
           <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
-            {corSelecionada?.foto_url ? (
-              <img src={corSelecionada.foto_url} alt={camisa.nome}
+            {camisa.camisa_cores?.[0]?.foto_url ? (
+              <img src={camisa.camisa_cores[0].foto_url} alt={camisa.nome}
                 className="w-14 h-14 rounded-lg object-cover border border-border flex-shrink-0" />
             ) : (
               <div className="w-14 h-14 rounded-lg bg-slate-200 flex items-center justify-center flex-shrink-0">
@@ -116,31 +123,6 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
                 <Badge variant="secondary" className="text-xs">{TIPOS_LABEL[camisa.tipo]}</Badge>
                 {camisa.estampada && <Badge variant="outline" className="text-xs">Estampada</Badge>}
               </div>
-            </div>
-          </div>
-
-          {/* Cor */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cor</Label>
-            <div className="flex flex-wrap gap-2">
-              {camisa.camisa_cores?.map((cor) => (
-                <button
-                  key={cor.id}
-                  type="button"
-                  onClick={() => handleCorChange(cor)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all",
-                    corSelecionada?.id === cor.id
-                      ? "border-primary bg-primary/5 text-primary font-medium"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  {cor.foto_url && (
-                    <img src={cor.foto_url} alt={cor.cor} className="w-5 h-5 rounded object-cover" />
-                  )}
-                  {cor.cor}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -197,81 +179,114 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
             </div>
           )}
 
-          {/* Tamanhos com quantidade */}
-          {corSelecionada && (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Tamanhos e Quantidades
-              </Label>
-              <div className="space-y-2">
-                {tamanhos.map((e) => {
-                  const sem = e.quantidade === 0;
-                  const qty = qtdPorTamanho[e.tamanho] || 0;
-                  return (
-                    <div
-                      key={e.tamanho}
-                      className={cn(
-                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all",
-                        sem && "opacity-40",
-                        !sem && qty > 0 ? "border-primary bg-primary/5" : "border-border"
-                      )}
-                    >
-                      {/* Tamanho + estoque */}
-                      <div className="flex items-center gap-2 min-w-[80px]">
-                        <span className={cn(
-                          "font-semibold text-sm w-10 text-center",
-                          qty > 0 && "text-primary"
-                        )}>
-                          {e.tamanho}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {sem ? "sem estoque" : `${e.quantidade} un.`}
-                        </span>
+          {/* Cores com tamanhos e quantidades */}
+          <div className="space-y-3">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Cores · Tamanhos · Quantidades
+            </Label>
+
+            {(camisa.camisa_cores || []).map((cor) => {
+              const qtdCor = Object.values(qtds[cor.id] || {}).reduce((s, q) => s + q, 0);
+              return (
+                <div
+                  key={cor.id}
+                  className={cn(
+                    "rounded-xl border overflow-hidden transition-all",
+                    qtdCor > 0 ? "border-primary/40" : "border-border"
+                  )}
+                >
+                  {/* Header da cor */}
+                  <div className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 text-sm font-medium",
+                    qtdCor > 0 ? "bg-primary/5" : "bg-slate-50"
+                  )}>
+                    {cor.foto_url ? (
+                      <img src={cor.foto_url} alt={cor.cor}
+                        className="w-8 h-8 rounded-md object-cover border border-border flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-md bg-slate-200 flex items-center justify-center flex-shrink-0">
+                        <ImageOff className="w-3.5 h-3.5 text-muted-foreground" />
                       </div>
+                    )}
+                    <span className={cn(qtdCor > 0 && "text-primary font-semibold")}>{cor.cor}</span>
+                    {qtdCor > 0 && (
+                      <Badge variant="default" className="ml-auto text-xs h-5 px-1.5">
+                        {qtdCor} {qtdCor === 1 ? "peça" : "peças"}
+                      </Badge>
+                    )}
+                  </div>
 
-                      {/* Controle de quantidade */}
-                      <div className="flex items-center gap-2 ml-auto">
-                        <button
-                          type="button"
-                          disabled={sem || qty === 0}
-                          onClick={() => decrementar(e.tamanho)}
-                          className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  {/* Grid de tamanhos */}
+                  <div className="p-2 space-y-1.5">
+                    {(cor.camisa_estoque || []).map((e) => {
+                      const sem = e.quantidade === 0;
+                      const qty = getQtd(cor.id, e.tamanho);
+                      return (
+                        <div
+                          key={e.tamanho}
+                          className={cn(
+                            "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all",
+                            sem && "opacity-40",
+                            !sem && qty > 0 ? "bg-primary/5" : ""
+                          )}
                         >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <Input
-                          type="number"
-                          min="0"
-                          max={e.quantidade}
-                          value={qty}
-                          disabled={sem}
-                          onChange={(ev) => setQtd(e.tamanho, ev.target.value, e.quantidade)}
-                          className="w-14 h-7 text-center text-sm px-1"
-                        />
-                        <button
-                          type="button"
-                          disabled={sem || qty >= e.quantidade}
-                          onClick={() => incrementar(e.tamanho, e.quantidade)}
-                          className="w-7 h-7 rounded-md border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
+                          {/* Tamanho + estoque */}
+                          <span className={cn(
+                            "font-semibold text-sm w-9 flex-shrink-0",
+                            qty > 0 && "text-primary"
+                          )}>
+                            {e.tamanho}
+                          </span>
+                          <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
+                            {sem ? "sem estoque" : `${e.quantidade} un.`}
+                          </span>
 
-                      {/* Subtotal da linha */}
-                      {qty > 0 && (
-                        <span className="text-sm font-semibold text-primary min-w-[80px] text-right">
-                          R$ {(precoFinal * qty).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                          {/* Controles */}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <button
+                              type="button"
+                              disabled={sem || qty === 0}
+                              onClick={() => decrementar(cor.id, e.tamanho)}
+                              className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <Input
+                              type="number"
+                              min="0"
+                              max={e.quantidade}
+                              value={qty}
+                              disabled={sem}
+                              onChange={(ev) => setQtd(cor.id, e.tamanho, ev.target.value, e.quantidade)}
+                              className="w-12 h-6 text-center text-sm px-1"
+                            />
+                            <button
+                              type="button"
+                              disabled={sem || qty >= e.quantidade}
+                              onClick={() => incrementar(cor.id, e.tamanho, e.quantidade)}
+                              className="w-6 h-6 rounded border border-border flex items-center justify-center hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
 
-          {/* Resumo */}
+                          {/* Subtotal da linha */}
+                          <span className={cn(
+                            "text-xs font-semibold text-right w-20 flex-shrink-0",
+                            qty > 0 ? "text-primary" : "text-transparent"
+                          )}>
+                            R$ {(precoFinal * qty).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Resumo total */}
           {itensSelecionados.length > 0 && (
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-1">
               <div className="flex justify-between text-sm">
@@ -284,12 +299,17 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
                   <span>- R$ {descontoValor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{totalPecas} {totalPecas === 1 ? "peça" : "peças"} · {itensSelecionados.length} {itensSelecionados.length === 1 ? "tamanho" : "tamanhos"}</span>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  {totalPecas} {totalPecas === 1 ? "peça" : "peças"} ·{" "}
+                  {itensSelecionados.length} {itensSelecionados.length === 1 ? "combinação" : "combinações"}
+                </span>
               </div>
               <div className="flex justify-between font-bold text-base pt-1 border-t border-primary/20">
                 <span>Total</span>
-                <span className="text-primary">R$ {subtotalTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                <span className="text-primary">
+                  R$ {subtotalTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           )}
@@ -302,7 +322,7 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
           >
             <ShoppingCart className="w-4 h-4 mr-2" />
             {itensSelecionados.length === 0
-              ? "Selecione ao menos um tamanho"
+              ? "Informe as quantidades desejadas"
               : `Adicionar ${totalPecas} ${totalPecas === 1 ? "peça" : "peças"} ao Carrinho`}
           </Button>
         </div>
