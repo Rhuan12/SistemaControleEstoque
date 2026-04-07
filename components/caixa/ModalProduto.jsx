@@ -12,6 +12,14 @@ const TIPOS_LABEL = {
   "infantil": "Infantil", "regata": "Regata",
 };
 
+const ORDEM_TAMANHOS = ["PP", "P", "M", "G", "GG", "XG", "2", "4", "6", "8", "10", "12", "14", "16"];
+
+function sortEstoque(estoque) {
+  return [...(estoque || [])].sort(
+    (a, b) => ORDEM_TAMANHOS.indexOf(a.tamanho) - ORDEM_TAMANHOS.indexOf(b.tamanho)
+  );
+}
+
 export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
   // qtds[corId][tamanho] = quantidade
   const [qtds, setQtds] = useState({});
@@ -66,7 +74,7 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
 
   // Gerar lista de itens selecionados (qty > 0) de todas as cores
   const itensSelecionados = (camisa.camisa_cores || []).flatMap((cor) =>
-    (cor.camisa_estoque || [])
+    sortEstoque(cor.camisa_estoque)
       .filter((e) => getQtd(cor.id, e.tamanho) > 0)
       .map((e) => ({
         camisa_id: camisa.id,
@@ -218,7 +226,7 @@ export default function ModalProduto({ camisa, open, onClose, onAdicionar }) {
 
                   {/* Grid de tamanhos */}
                   <div className="p-2 space-y-1.5">
-                    {(cor.camisa_estoque || []).map((e) => {
+                    {sortEstoque(cor.camisa_estoque).map((e) => {
                       const sem = e.quantidade === 0;
                       const qty = getQtd(cor.id, e.tamanho);
                       return (
